@@ -10,24 +10,13 @@ if not firebase_admin._apps:
     # Firebase credentials from Streamlit secrets
     firebase_credentials = st.secrets["firebase"]
 
-    # Create a dictionary with parsed credentials
-    cred_dict = {
-        "type": firebase_credentials["type"],
-        "project_id": firebase_credentials["project_id"],
-        "private_key_id": firebase_credentials["private_key_id"],
-        "private_key": firebase_credentials["private_key"],
-        "client_email": firebase_credentials["client_email"],
-        "client_id": firebase_credentials["client_id"],
-        "auth_uri": firebase_credentials["auth_uri"],
-        "token_uri": firebase_credentials["token_uri"],
-        "auth_provider_x509_cert_url": firebase_credentials["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": firebase_credentials["client_x509_cert_url"],
-        "universe_domain": firebase_credentials["universe_domain"]
-    }
-
-    # Initialize Firebase Admin SDK with the credentials dictionary
-    cred = credentials.Certificate(cred_dict)
-    firebase_admin.initialize_app(cred)
+    # Check the structure of the secrets to ensure they are correctly passed
+    if not all(key in firebase_credentials for key in ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri", "auth_provider_x509_cert_url", "client_x509_cert_url", "universe_domain"]):
+        st.error("Firebase credentials are missing or incomplete in Streamlit secrets.")
+    else:
+        # Initialize Firebase with the credentials dictionary
+        cred = credentials.Certificate(firebase_credentials)
+        firebase_admin.initialize_app(cred)
 
 # Firestore client setup
 db = firestore.client()
