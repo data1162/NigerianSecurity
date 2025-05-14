@@ -7,18 +7,9 @@ from datetime import datetime
 
 # ------------------ FIREBASE CONNECTION ------------------
 if not firebase_admin._apps:
-    # Firebase credentials from Streamlit secrets
-    firebase_credentials = st.secrets["firebase"]
-
-    # Check the structure of the secrets to ensure they are correctly passed
-    if not all(key in firebase_credentials for key in ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri", "auth_provider_x509_cert_url", "client_x509_cert_url", "universe_domain"]):
-        st.error("Firebase credentials are missing or incomplete in Streamlit secrets.")
-    else:
-        # Initialize Firebase with the credentials dictionary
-        cred = credentials.Certificate(firebase_credentials)
-        firebase_admin.initialize_app(cred)
-
-# Firestore client setup
+    firebase_credentials = st.secrets["firebase"]  # Accessing the credentials from Streamlit secrets
+    cred = credentials.Certificate(firebase_credentials)
+    firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # ------------------ STREAMLIT APP ------------------
@@ -49,7 +40,6 @@ with st.form("incident_form"):
         if not location_address or not map_data["last_clicked"]:
             st.warning("Please provide an address and select a location on the map.")
         else:
-            # Create the report data
             report = {
                 "timestamp": datetime.utcnow(),
                 "location_address": location_address,
@@ -60,8 +50,5 @@ with st.form("incident_form"):
                 "mobility": mobility,
                 "other_info": other_info
             }
-
-            # Save the report to Firestore
             db.collection("incidents").add(report)
-
             st.success("✅ Report submitted successfully. Thank you for helping keep Nigeria safe.")
