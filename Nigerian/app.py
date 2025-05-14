@@ -1,54 +1,55 @@
-import streamlit as st
+import json
 import firebase_admin
 from firebase_admin import credentials, firestore
-from streamlit_folium import st_folium
-import folium
-from datetime import datetime
+import streamlit as st
 
 # ------------------ FIREBASE CONNECTION ------------------
 if not firebase_admin._apps:
-    firebase_credentials = st.secrets["firebase"]  # Accessing the credentials from Streamlit secrets
-    cred = credentials.Certificate(firebase_credentials)
+    # Load the firebase credentials from Streamlit secrets
+    firebase_credentials = st.secrets["firebase"]
+    
+    # Convert the string to a dictionary if necessary
+    firebase_credentials_dict = json.loads(firebase_credentials)
+    
+    # Initialize Firebase with the credentials
+    cred = credentials.Certificate(firebase_credentials_dict)
     firebase_admin.initialize_app(cred)
-db = firestore.client()
+    
+    # Initialize Firestore
+    db = firestore.client()
 
-# ------------------ STREAMLIT APP ------------------
-st.set_page_config(page_title="Insecurity Incident Reporter", layout="centered")
+# ------------------ STREAMLIT UI ------------------
+st.title("Nigerian Security Incidents Report")
+st.write("Welcome to the app for reporting and monitoring insecurity incidents in Northern Nigeria.")
 
-st.title("🛡️ Report Insecurity Incident in Northern Nigeria")
+# Example of Firebase usage - Display all incidents from Firestore
+st.header("Security Incidents")
 
-with st.form("incident_form"):
-    st.subheader("📍 Incident Details")
+# Query all incidents from Firestore (assuming incidents are stored in the 'incidents' collection)
+incidents_ref = db.collection("incidents")
+incidents = incidents_ref.stream()
 
-    # Map for picking location
-    st.markdown("**Step 1:** Pinpoint the incident location on the map.")
-    m = folium.Map(location=[11.5, 8.5], zoom_start=6)  # Northern Nigeria
-    marker = folium.Marker(location=[11.5, 8.5], draggable=True)
-    marker.add_to(m)
-    map_data = st_folium(m, height=350, width=700)
+# Display each incident
+for incident in incidents:
+    st.write(f"**{incident.id}**: {incident.to_dict()['description']}")
 
-    st.markdown("**Step 2:** Fill in incident information.")
-    location_address = st.text_input("🗺️ Location Address")
-    num_terrorists = st.number_input("👥 Number of Terrorists", min_value=1)
-    arms_type = st.text_area("🔫 Type of Weapons Observed (e.g., AK-47s, RPGs)")
-    mobility = st.selectbox("🚙 How are they moving?", ["Motorbikes", "Vehicles", "On foot"])
-    other_info = st.text_area("📝 Other Relevant Info (optional)")
+# Form for reporting new incidents
+with st.form(key='incident_form'):
+    st.subheader("Report a New Incident")
+    description = st.text_area("Incident Description", "")
+    location = st.text_input("Location", "")
+    date = st.date_input("Date of Incident")
+    
+    submit_button = st.form_submit_button("Submit Incident")
+    
+    if submit_button:
+        # Add the new incident to Firestore
+        new_incident_ref = db.collection("incidents").add({
+            "description": description,
+            "location": location,
+            "date": date,
+            "status": "Reported"
+        })
+        st.success("Incident successfully reported!")
 
-    submitted = st.form_submit_button("🚨 Submit Report")
-
-    if submitted:
-        if not location_address or not map_data["last_clicked"]:
-            st.warning("Please provide an address and select a location on the map.")
-        else:
-            report = {
-                "timestamp": datetime.utcnow(),
-                "location_address": location_address,
-                "latitude": map_data["last_clicked"]["lat"],
-                "longitude": map_data["last_clicked"]["lng"],
-                "num_terrorists": num_terrorists,
-                "arms_type": arms_type,
-                "mobility": mobility,
-                "other_info": other_info
-            }
-            db.collection("incidents").add(report)
-            st.success("✅ Report submitted successfully. Thank you for helping keep Nigeria safe.")
+# ------------------ END ------------------
