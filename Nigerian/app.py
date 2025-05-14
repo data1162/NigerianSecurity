@@ -1,48 +1,72 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import json
+from streamlit_folium import st_folium
+import folium
+from datetime import datetime
 
 # ------------------ FIREBASE CONNECTION ------------------
 if not firebase_admin._apps:
-    # Load Firebase credentials from Streamlit secrets
-    firebase_credentials = st.secrets["firebase"]  # Accessing the credentials as a dictionary
-    cred = credentials.Certificate(firebase_credentials)  # Pass directly if it's a dictionary
-    firebase_admin.initialize_app(cred)
+    # Firebase credentials from Streamlit secrets
+    firebase_credentials = st.secrets["firebase"]
 
-# Initialize Firestore DB
+    # Check the structure of the secrets to ensure they are correctly passed
+    if not all(key in firebase_credentials for key in ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri", "auth_provider_x509_cert_url", "client_x509_cert_url", "universe_domain"]):
+        st.error("Firebase credentials are missing or incomplete in Streamlit secrets.")
+    else:
+        try:
+            # Initialize Firebase with the credentials dictionary
+            cred = credentials.Certificate(firebase_credentials)
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            st.error(f"Failed to initialize Firebase: {str(e)}")
+
+# Firestore client setup
 db = firestore.client()
 
-# ------------------ Streamlit UI ------------------
-st.title("Nigerian Security Dashboard")
+# ------------------ STREAMLIT APP ------------------
+st.set_page_config(page_title="Insecurity Incident Reporter", layout="centered")
 
-# Fetch and display security incidents from Firestore
-incident_ref = db.collection('incidents')
-incident_docs = incident_ref.stream()
+st.title("🛡️ Report Insecurity Incident in Northern Nigeria")
 
-st.write("### Security Incidents")
-for doc in incident_docs:
-    st.write(f"**Incident ID**: {doc.id}")
-    st.write(f"**Description**: {doc.to_dict().get('description')}")
-    st.write(f"**Location**: {doc.to_dict().get('location')}")
-    st.write(f"**Date**: {doc.to_dict().get('date')}")
-    st.write("-" * 30)
+with st.form("incident_form"):
+    st.subheader("📍 Incident Details")
 
-# Form to report a new incident
-st.write("### Report a New Incident")
-with st.form(key='incident_form'):
-    description = st.text_area("Description")
-    location = st.text_input("Location")
-    date = st.date_input("Date of Incident")
-    submit_button = st.form_submit_button("Submit Incident")
+    # Map for picking location
+    st.markdown("**Step 1:** Pinpoint the incident location on the map.")
+    m = folium.Map(location=[11.5, 8.5], zoom_start=6)  # Northern Nigeria
+    marker = folium.Marker(location=[11.5, 8.5], draggable=True)
+    marker.add_to(m)
+    map_data = st_folium(m, height=350, width=700)
 
-    if submit_button:
-        if description and location and date:
-            incident_ref.add({
-                'description': description,
-                'location': location,
-                'date': date.strftime("%Y-%m-%d")
-            })
-            st.success("Incident reported successfully!")
+    st.markdown("**Step 2:** Fill in incident information.")
+    location_address = st.text_input("🗺️ Location Address")
+    num_terrorists = st.number_input("👥 Number of Terrorists", min_value=1)
+    arms_type = st.text_area("🔫 Type of Weapons Observed (e.g., AK-47s, RPGs)")
+    mobility = st.selectbox("🚙 How are they moving?", ["Motorbikes", "Vehicles", "On foot"])
+    other_info = st.text_area("📝 Other Relevant Info (optional)")
+
+    submitted = st.form_submit_button("🚨 Submit Report")
+
+    if submitted:
+        if not location_address or not map_data["last_clicked"]:
+            st.warning("Please provide an address and select a location on the map.")
         else:
-            st.error("Please fill in all fields.")
+            # Create the report data
+            report = {
+                "timestamp": datetime.utcnow(),
+                "location_address": location_address,
+                "latitude": map_data["last_clicked"]["lat"],
+                "longitude": map_data["last_clicked"]["lng"],
+                "num_terrorists": num_terrorists,
+                "arms_type": arms_type,
+                "mobility": mobility,
+                "other_info": other_info
+            }
+
+            # Save the report to Firestore
+            try:
+                db.collection("incidents").add(report)
+                st.success("✅ Report submitted successfully. Thank you for helping keep Nigeria safe.")
+            except Exception as e:
+                st.error(f"Error submitting report: {str(e)}")
