@@ -1,61 +1,78 @@
 import streamlit as st
-import pandas as pd
-from streamlit_folium import st_folium
-import folium
 import firebase_admin
 from firebase_admin import credentials, firestore
+from streamlit_folium import st_folium
+import folium
 from datetime import datetime
 
-# -------------------- Firebase Setup --------------------
+# ------------------ FIREBASE CONNECTION ------------------
 if not firebase_admin._apps:
-    cred = credentials.Certificate(st.secrets["firebase"])
+    # Firebase credentials from Streamlit secrets
+    firebase_credentials = st.secrets["firebase"]
+
+    # Create a dictionary with parsed credentials
+    cred_dict = {
+        "type": firebase_credentials["type"],
+        "project_id": firebase_credentials["project_id"],
+        "private_key_id": firebase_credentials["private_key_id"],
+        "private_key": firebase_credentials["private_key"],
+        "client_email": firebase_credentials["client_email"],
+        "client_id": firebase_credentials["client_id"],
+        "auth_uri": firebase_credentials["auth_uri"],
+        "token_uri": firebase_credentials["token_uri"],
+        "auth_provider_x509_cert_url": firebase_credentials["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": firebase_credentials["client_x509_cert_url"],
+        "universe_domain": firebase_credentials["universe_domain"]
+    }
+
+    # Initialize Firebase Admin SDK with the credentials dictionary
+    cred = credentials.Certificate(cred_dict)
     firebase_admin.initialize_app(cred)
+
+# Firestore client setup
 db = firestore.client()
 
-# -------------------- Streamlit UI --------------------
-st.set_page_config(page_title="Insecurity Reporting App", layout="wide")
-st.title("🚨 Report an Insecurity Incident")
-st.markdown("Please provide accurate and timely information to help Nigerian security agencies respond effectively.")
+# ------------------ STREAMLIT APP ------------------
+st.set_page_config(page_title="Insecurity Incident Reporter", layout="centered")
+
+st.title("🛡️ Report Insecurity Incident in Northern Nigeria")
 
 with st.form("incident_form"):
-    st.subheader("📍 Location of Incident")
-    col1, col2 = st.columns(2)
+    st.subheader("📍 Incident Details")
 
-    # Map to select coordinates
-    with col1:
-        m = folium.Map(location=[11.5, 8.5], zoom_start=6)
-        map_data = st_folium(m, height=300, returned_objects=["last_clicked"])
+    # Map for picking location
+    st.markdown("**Step 1:** Pinpoint the incident location on the map.")
+    m = folium.Map(location=[11.5, 8.5], zoom_start=6)  # Northern Nigeria
+    marker = folium.Marker(location=[11.5, 8.5], draggable=True)
+    marker.add_to(m)
+    map_data = st_folium(m, height=350, width=700)
 
-    with col2:
-        location_address = st.text_input("Location Address (Town, LGA, State)")
+    st.markdown("**Step 2:** Fill in incident information.")
+    location_address = st.text_input("🗺️ Location Address")
+    num_terrorists = st.number_input("👥 Number of Terrorists", min_value=1)
+    arms_type = st.text_area("🔫 Type of Weapons Observed (e.g., AK-47s, RPGs)")
+    mobility = st.selectbox("🚙 How are they moving?", ["Motorbikes", "Vehicles", "On foot"])
+    other_info = st.text_area("📝 Other Relevant Info (optional)")
 
-    st.subheader("⚠️ Incident Details")
-    num_terrorists = st.number_input("Number of terrorists involved", min_value=1, step=1)
-    arms = st.text_area("Type of arms (e.g., AK-47s, explosives)")
-    transport_mode = st.selectbox("Mode of transport", ["Motorbikes", "Vehicles", "On Foot", "Unknown"])
-    extra_info = st.text_area("Additional Information (e.g., direction they fled, dress code)")
+    submitted = st.form_submit_button("🚨 Submit Report")
 
-    submitted = st.form_submit_button("📤 Submit Report")
+    if submitted:
+        if not location_address or not map_data["last_clicked"]:
+            st.warning("Please provide an address and select a location on the map.")
+        else:
+            # Create the report data
+            report = {
+                "timestamp": datetime.utcnow(),
+                "location_address": location_address,
+                "latitude": map_data["last_clicked"]["lat"],
+                "longitude": map_data["last_clicked"]["lng"],
+                "num_terrorists": num_terrorists,
+                "arms_type": arms_type,
+                "mobility": mobility,
+                "other_info": other_info
+            }
 
-# -------------------- Submit to Firebase --------------------
-if submitted:
-    if map_data and map_data["last_clicked"] and location_address:
-        lat = map_data["last_clicked"]["lat"]
-        lon = map_data["last_clicked"]["lng"]
+            # Save the report to Firestore
+            db.collection("incidents").add(report)
 
-        report = {
-            "timestamp": datetime.utcnow(),
-            "latitude": lat,
-            "longitude": lon,
-            "location_address": location_address,
-            "num_terrorists": num_terrorists,
-            "arms": arms,
-            "transport_mode": transport_mode,
-            "extra_info": extra_info
-        }
-
-        db.collection("incident_reports").add(report)
-        st.success("✅ Report submitted successfully!")
-        st.balloons()
-    else:
-        st.warning("⚠️ Please click on the map and provide a location address.")
+            st.success("✅ Report submitted successfully. Thank you for helping keep Nigeria safe.")
