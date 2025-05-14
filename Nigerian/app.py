@@ -4,22 +4,20 @@ from firebase_admin import credentials, firestore
 from streamlit_folium import st_folium
 import folium
 from datetime import datetime
+import json
 
 # ------------------ FIREBASE CONNECTION ------------------
 if not firebase_admin._apps:
-    # Firebase credentials from Streamlit secrets
+    # Load Firebase credentials from Streamlit secrets
     firebase_credentials = st.secrets["firebase"]
 
-    # Check the structure of the secrets to ensure they are correctly passed
-    if not all(key in firebase_credentials for key in ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri", "auth_provider_x509_cert_url", "client_x509_cert_url", "universe_domain"]):
-        st.error("Firebase credentials are missing or incomplete in Streamlit secrets.")
-    else:
-        try:
-            # Initialize Firebase with the credentials dictionary
-            cred = credentials.Certificate(firebase_credentials)
-            firebase_admin.initialize_app(cred)
-        except Exception as e:
-            st.error(f"Failed to initialize Firebase: {str(e)}")
+    # Ensure the credentials are in the correct format
+    try:
+        # Initialize Firebase with the credentials dictionary
+        cred = credentials.Certificate(firebase_credentials)
+        firebase_admin.initialize_app(cred)
+    except Exception as e:
+        st.error(f"Failed to initialize Firebase: {str(e)}")
 
 # Firestore client setup
 db = firestore.client()
